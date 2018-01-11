@@ -73,9 +73,9 @@ def process_row_to_db(conn, data_row, comment, hostname):
     tag_id = ''
 
     if len(data_row) >= 3:
-        exchange_host = data_row[0].lower()
-        seller_account_id = data_row[1].lower()
-        account_type = data_row[2].lower()
+        exchange_host = data_row[0].strip().lower()
+        seller_account_id = data_row[1].strip().lower()
+        account_type = data_row[2].strip().lower()
 
     if len(data_row) == 4:
         tag_id = data_row[3].lower()
@@ -146,39 +146,44 @@ def crawl_to_db(ahost, subdomain=False):
     try:
         r = requests.get(aurl, headers=myheaders, timeout=5)
         logging.info('  %d' % r.status_code)
-        if (r.status_code == 200):
-            text = r.text.lower()
+        if (r.status_code == 200
+                and r.headers['content-type'].startswith('text/')
+                and len(r.text) > 0):
+            t = r.text.lower()
             # ignore html file
-            if ('html' not in text and 'body' not in text and 'div' not in text
-                    and 'span' not in text):
+            if ('<html' not in t and '<title' not in t and '<meta' not in t
+                    and '<script' not in t and '<body' not in t
+                    and '<div' not in t and '<span' not in t and '<b' not in t
+                    and '<a' not in t and '<p' not in t and '<h' not in t):
                 accept = True
     except:
         pass
+    if not accept:
+        return rowcnt
 
-    if (accept):
-        # remove BOM and non ascii text
-        text = r.text.encode('utf_8')
-        text = text.decode('utf-8-sig').encode('utf_8')
-        text = re.sub(re.compile('[^\x20-\x7E\r\n]'), '', text)
+    # remove BOM and non ascii text
+    text = r.text.encode('utf_8')
+    text = text.decode('utf-8-sig').encode('utf_8')
+    text = re.sub(re.compile('[^\x20-\x7E\r\n]'), '', text)
 
-        logging.debug('-------------')
-        logging.debug(r.request.headers)
-        logging.debug('-------------')
-        logging.debug('%s' % text)
-        logging.debug('-------------')
+    logging.debug('-------------')
+    logging.debug(r.request.headers)
+    logging.debug('-------------')
+    logging.debug('%s' % text)
+    logging.debug('-------------')
 
-        with tempfile.NamedTemporaryFile(delete=False) as tmp_csv_file:
-            tmpfile = tmp_csv_file.name
-            tmp_csv_file.write(text)
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_csv_file:
+        tmpfile = tmp_csv_file.name
+        tmp_csv_file.write(text)
 
-        with open(tmpfile, 'rb') as tmp_csv_file:
-            # read the line, split on first comment and keep what is to the
-            # left (if any found)
-            line_reader = csv.reader(
-                tmp_csv_file, delimiter='#', quotechar='|')
-            comment = ''
+    with open(tmpfile, 'rbU') as tmp_csv_file:
+        # read the line, split on first comment and keep what is to the
+        # left (if any found)
+        line_reader = csv.reader(tmp_csv_file, delimiter='#', quotechar='|')
+        comment = ''
 
-            conn = sqlite3.connect(database, timeout=10)
+        try:
+            conn = sqlite3.connect(database, timeout=15)
             with conn:
                 for line in line_reader:
                     logging.debug('DATA:  %s' % line)
@@ -214,6 +219,9 @@ def crawl_to_db(ahost, subdomain=False):
                             comment = line[1]
 
                         rowcnt += process_row_to_db(conn, row, comment, ahost)
+
+        except:
+            pass
 
         os.remove(tmpfile)
 
@@ -285,12 +293,16 @@ def load_url_queue(csvfilename, url_queue):
 #
 #################################################################
 
+
 def update_adsystem_domain():
     update_stmt = "UPDATE ADSTXT SET ADSYSTEM_DOMAIN = (SELECT IFNULL(ID,0) FROM ADSYSTEM_DOMAIN WHERE ADSTXT.EXCHANGE_DOMAIN = ADSYSTEM_DOMAIN.DOMAIN) WHERE EXISTS (SELECT * FROM ADSYSTEM_DOMAIN WHERE ADSTXT.EXCHANGE_DOMAIN = ADSYSTEM_DOMAIN.DOMAIN);"
-    conn = sqlite3.connect(database, timeout=10)
-    with conn:
-        c = conn.cursor()
-        c.execute(update_stmt)
+    try:
+        conn = sqlite3.connect(database, timeout=10)
+        with conn:
+            c = conn.cursor()
+            c.execute(update_stmt)
+    except:
+        pass
 
 
 # end update_adsystem_domain  #####
