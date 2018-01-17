@@ -227,7 +227,7 @@ def crawl_to_db(ahost, subdomain=False):
 
     if not subdomain:
         for ahost in subdomains:
-            rowcnt += crawl_to_db(ahost, subdomain=True)
+            rowcnt += crawl_to_db(ahost, True)
 
     return rowcnt
 
