@@ -226,6 +226,7 @@ def crawl_to_db(ahost, subdomain=False):
         os.remove(tmpfile)
 
     if not subdomain:
+        subdomains = [x for x in subdomains if x != ahost]
         for ahost in subdomains:
             rowcnt += crawl_to_db(ahost, True)
 
